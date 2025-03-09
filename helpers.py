@@ -14,11 +14,11 @@ import pandas as pd
 import glob
 import time
 from dotenv import load_dotenv
-import json
+from openai import OpenAI
+import openai
 
-# Load environment variables
+
 load_dotenv()
-
 def parse_html_to_dict(html_text):
     soup = BeautifulSoup(html_text, 'html.parser')
     text_parts = []
@@ -29,89 +29,100 @@ def parse_html_to_dict(html_text):
 
     return combined_text, img_links
 
+# def llm_call(system_prompt,user_prompt):
+#     print("calling API 1")
+#     client = AzureOpenAI(
+#         azure_endpoint="https://nw-tech-chat.openai.azure.com/openai/deployments/o3-mini/chat/completions?api-version=2024-12-01-preview",
+#         api_key="...",
+#         api_version="2024-12-01-preview"
+#     )
+#     response = client.chat.completions.create(model="o3-mini", messages=[{"role": "system", "content":  system_prompt },{"role": "user", "content": user_prompt}])
+
+#     res_text = response.choices[0].message.content
+#     #print(response.usage.completion_tokens,response.usage.prompt_tokens)
+#     return res_text
+
+
 def llm_call(system_prompt, user_prompt):
-    api_key = os.getenv('OPENROUTER_API_KEY')
-    if not api_key:
-        raise ValueError("OPENROUTER_API_KEY environment variable is not set")
-
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "HTTP-Referer": "https://ide-mentor-bot-frontend.onrender.com/",
-        "X-Title": "IDE Mentor Bot"
-    }
-
-    payload = {
-        "model": "openai/gpt-3.5-turbo",
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt}
-        ]
-    }
-
     try:
-        response = requests.post(
-            "https://openrouter.ai/api/v1/chat/completions",
-            headers=headers,
-            json=payload
+        print("Calling OpenRouter API...")
+        
+        # First try environment variable
+        api_key = os.getenv("api_key")
+        openai.api_key = api_key
+        
+        client = OpenAI(
+            base_url="https://openrouter.ai/api/v1",
+            api_key=api_key,  # Replace with your API key
         )
-        response.raise_for_status()
-        return response.json()['choices'][0]['message']['content']
-    except requests.exceptions.RequestException as e:
-        error_msg = f"Error calling OpenRouter API: {str(e)}"
-        if hasattr(e.response, 'json'):
-            try:
-                error_msg += f" - {e.response.json()}"
-            except:
-                pass
-        raise Exception(error_msg)
+                    
+        completion = client.chat.completions.create(
+            model="deepseek/deepseek-r1-distill-llama-70b:free",  # Model you're using
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            temperature=0.2  # Temperature setting for the model
+        )
 
-def llm_call_with_image(system_prompt, user_prompt, images):
-    api_key = os.getenv('OPENROUTER_API_KEY')
-    if not api_key:
-        raise ValueError("OPENROUTER_API_KEY environment variable is not set")
+        if completion.choices:
+            result = completion.choices[0].message.content
+            return result  # This will print the response from the AI model
+        else:
+            print("Error: No response received from the AI model.")
 
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "HTTP-Referer": "https://ide-mentor-bot-frontend.onrender.com/",
-        "X-Title": "IDE Mentor Bot"
-    }
+    except Exception as e:
+        print(f"Error calling OpenRouter API: {str(e)}")
+        return "I apologize, but I'm having trouble processing your request at the moment. Please try again later."
 
-    messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": [
-            {"type": "text", "text": user_prompt}
-        ]}
-    ]
 
-    # Add images to the user message
-    for image in images:
-        messages[-1]["content"].append({
-            "type": "image_url",
-            "image_url": {"url": image}
-        })
-
-    payload = {
-        "model": "openai/gpt-4-vision-preview",
-        "messages": messages,
-        "max_tokens": 4096
-    }
-
+def llm_call_with_image(system_prompt, user_prompt_text, user_base_64_imgs):
     try:
-        response = requests.post(
-            "https://openrouter.ai/api/v1/chat/completions",
-            headers=headers,
-            json=payload
+        print("Calling OpenRouter API with images...")
+        
+        # First try environment variable
+        api_key = os.getenv('api_key')
+
+        if not api_key:
+            # Fallback to a default key
+            api_key = api_key
+
+        # Prepare the messages with images
+        user_prompt_content = [{"type": "text", "text": user_prompt_text}]
+        for img in user_base_64_imgs:
+            img_content = {"type": "image_url", "image_url": {"url": f"data:image/{img['extension']};base64,{img['content']}"}}
+            user_prompt_content.append(img_content)
+            
+            
+        client = OpenAI(
+            base_url="https://openrouter.ai/api/v1",
+            api_key=api_key,  # Replace with your API key
         )
-        response.raise_for_status()
-        return response.json()['choices'][0]['message']['content']
-    except requests.exceptions.RequestException as e:
-        error_msg = f"Error calling OpenRouter API with images: {str(e)}"
-        if hasattr(e.response, 'json'):
-            try:
-                error_msg += f" - {e.response.json()}"
-            except:
-                pass
-        raise Exception(error_msg)
+                    
+        completion = client.chat.completions.create(
+            extra_headers={
+                "HTTP-Referer": "https://github.com/ranjithkumarkurva",  # Optional. Referer URL for rankings
+                "X-Title": "IDE-Mentor-Bot",  # Optional. Title for rankings
+            },
+            model="deepseek/deepseek-r1-distill-llama-70b:free",  # Model you're using
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt_content}
+            ],
+            temperature=0.2  # Temperature setting for the model
+        )
+
+# Extract the response from the completion and return the content
+        if completion.choices:
+            result = completion.choices[0].message.content
+            return result  # This will print the response from the AI model
+        else:
+            print("Error: No response received from the AI model.")
+
+    except Exception as e:
+        print(f"Error calling OpenRouter API with images: {str(e)}")
+        return "I apologize, but I'm having trouble processing your image-based request at the moment. Please try again later."
+
 
 def download_image(url):
     response = requests.get(url)
@@ -123,6 +134,7 @@ def download_image(url):
     else:
         raise Exception(f"Failed to download image. Status code: {response.status_code}")
 
+
 def encode_image_to_base64(image_path):
     with Image.open(image_path) as image:
         image_format = image.format.lower()
@@ -131,30 +143,35 @@ def encode_image_to_base64(image_path):
         img_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
     return img_str, image_format
 
+
 def extract_file_contents_with_tree(folder_path, full_desc=False):
     result = []
     tree = []
     allowed_extensions = ('.json', '.js', '.ts', '.html', '.css')
 
+
     def add_to_tree(path, indent=""):
         parts = path.split(os.sep)
         tree.append(f"{indent}* {parts[-1]}")
+
 
     for root, dirs, files in os.walk(folder_path):
         if 'node_modules' in dirs:
             dirs.remove('node_modules')  # Don't traverse into node_modules
 
+
         level = root.replace(folder_path, '').count(os.sep)
         indent = '  ' * level
         add_to_tree(root, indent)
+
 
         for file in files:
             if file.endswith(allowed_extensions):
                 file_path = os.path.join(root, file)
                 relative_path = os.path.relpath(file_path, folder_path)
-
+                
                 add_to_tree(file, indent + '  ')
-
+                
                 try:
                     with open(file_path, 'r', encoding='utf-8') as f:
                         content = f.read()
@@ -162,14 +179,17 @@ def extract_file_contents_with_tree(folder_path, full_desc=False):
                 except Exception as e:
                     result.append(f"\nError reading file {relative_path}: {str(e)}\n")
 
+
     tree_str = "\n".join(tree)
     content_str = "".join(result)
+
 
     final_output = f"Directory Tree: \n{tree_str}"
     if full_desc:
         final_output += f"\n\nFile contents: \n{content_str}"
+    
+    return final_output  
 
-    return final_output
 
 def get_question_details_from_zip(zip_filename):
     """
@@ -182,39 +202,39 @@ def get_question_details_from_zip(zip_filename):
         dict: A dictionary containing 'question_command_id', 'question_content', and 'question_test_cases'.
               Returns None if no matching record is found.
     """
-    csv_file_path = 'commands.csv'
-
+    csv_file_path = 'commands.csv' 
+    
     try:
         # Read CSV with explicit encoding and handling for special characters
         df = pd.read_csv(csv_file_path, encoding='utf-8', on_bad_lines='skip')
-
+        
         # Clean the data
         df['question_command_id'] = df['question_command_id'].str.strip()
-
+        
         # Print debug information
         print("CSV File Info:")
         print(f"Total rows: {len(df)}")
         print(f"Columns: {df.columns.tolist()}")
         print(f"First few question IDs: {df['question_command_id'].head().tolist()}")
         print(f"Looking for ID: {zip_filename}")
-
+        
         # Update required_columns to map to existing columns
         required_columns = ['question_command_id', 'question_content', 'question_test_cases']
         for column in required_columns:
             if column not in df.columns:
                 print(f"Error: Column '{column}' not found in the CSV. Available columns: {df.columns.tolist()}")
                 return None
-
+        
         # Assuming zip_filename corresponds to 'question_command_id'
         result = df[df['question_command_id'].str.contains(zip_filename, na=False, case=False)]
-
+        
         if result.empty:
             print(f"Error: Question ID '{zip_filename}' not found in the CSV.")
             print("Available IDs:")
             for id in df['question_command_id'].unique():
                 print(f"- {id}")
             return None
-
+        
         # Assuming 'question_command_id' is unique, take the first matching row
         row = result.iloc[0]
         return {
@@ -222,7 +242,7 @@ def get_question_details_from_zip(zip_filename):
             'question_content': str(row['question_content']),
             'question_test_cases': str(row['question_test_cases'])
         }
-
+    
     except FileNotFoundError:
         print(f"Error: CSV file '{csv_file_path}' not found in current directory: {os.getcwd()}")
         return None
@@ -233,6 +253,7 @@ def get_question_details_from_zip(zip_filename):
         print(f"Error processing CSV file: {str(e)}")
         print(f"Current working directory: {os.getcwd()}")
         return None
+
 
 def copy_folder_to_docker(container_id, zip_path, output_folder):
     """
@@ -250,11 +271,14 @@ def copy_folder_to_docker(container_id, zip_path, output_folder):
     if not os.path.isfile(zip_path):
         raise FileNotFoundError(f"Zip file '{zip_path}' does not exist.")
 
+
     # Define workspace directory
     workspace_dir = "./workspace"
 
+
     # Clean workspace
     check_and_delete_folder(workspace_dir)
+
 
     # Extract zip to workspace
     try:
@@ -268,15 +292,19 @@ def copy_folder_to_docker(container_id, zip_path, output_folder):
         print(f"An error occurred while extracting zip: {e}")
         return
 
+
     # Create output directory inside Docker container
     create_output_cmd = f"docker exec {container_id} mkdir -p {output_folder}"
     subprocess.run(create_output_cmd, shell=True, check=True)
+
 
     # Copy contents to Docker container
     copy_cmd = f"docker cp {workspace_dir}/. {container_id}:{output_folder}"
     subprocess.run(copy_cmd, shell=True, check=True)
 
+
     print(f"Contents of '{workspace_dir}' have been copied to '{output_folder}' in container '{container_id}'.")
+
 
 def check_and_delete_folder(folder_path):
     """
