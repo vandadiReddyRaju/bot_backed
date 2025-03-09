@@ -23,8 +23,7 @@ yarn-error.log*
 .vscode/
 .idea/
 
-# Workspace
-workspace/
+# Other
 qr_bot_venv/
 *.jpeg
 *.png
