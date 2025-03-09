@@ -12,7 +12,7 @@ app = Flask(__name__)
 # Enable CORS for all routes with port 3005
 CORS(app, resources={
     r"/*": {
-        "origins": ["http://localhost:3005", "http://127.0.0.1:3005"],
+        "origins": ["http://localhost:3005", "http://127.0.0.1:3005","https://ide-mentor-bot-frontend.onrender.com"],
         "methods": ["GET", "POST", "OPTIONS"],
         "allow_headers": ["Content-Type", "Accept"],
         "expose_headers": ["Content-Type", "Accept"]
