@@ -5,6 +5,18 @@ import pandas as pd
 from zipfile import ZipFile, BadZipFile
 import subprocess
 import shutil
+import docker
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
+def get_docker_client():
+    try:
+        return docker.from_env()
+    except Exception as e:
+        print(f"Failed to initialize Docker client: {e}")
+        return None
 
 def get_question_details(question_id, column_name):
     csv_file_path = 'commands.csv' 
@@ -26,8 +38,6 @@ def get_question_details(question_id, column_name):
         
         if result.empty:
             print(f"Question ID '{question_id}' not found in the CSV.")
-            print("Available columns:", df.columns.tolist())
-            print("Available question IDs:", df['question_command_id'].unique().tolist() if 'question_command_id' in df.columns else df['question_id'].unique().tolist())
             return None
             
         return str(result[column_name].iloc[0])
@@ -51,12 +61,13 @@ def check_and_delete_folder(folder_path):
         except Exception as e:
             print(f"Error occurred while deleting the folder: {e}")
             return False
-    else:
-        print(f"Folder '{folder_path}' does not exist.")
-        return False
+    return True  # Return True if folder doesn't exist, as that's what we want
 
 def extract_zip(zip_path, output_folder="./workspace"):
     try:
+        # Create output folder if it doesn't exist
+        os.makedirs(output_folder, exist_ok=True)
+        
         with ZipFile(zip_path, 'r') as zip_ref:
             zip_ref.extractall(output_folder)
         print(f"Extracted '{zip_path}' to '{output_folder}'.")
@@ -69,38 +80,74 @@ def extract_zip(zip_path, output_folder="./workspace"):
         return None
 
 def copy_folder_to_docker(container_id, input_folder, output_folder):
-    if not os.path.exists(input_folder):
-        raise ValueError(f"Input folder '{input_folder}' does not exist")
-    print(f"output_folder : {output_folder}")
-    create_output_cmd = f"docker exec {container_id} mkdir -p {output_folder}"
-    subprocess.run(create_output_cmd, shell=True, check=True)
-
-    copy_cmd = f"docker cp {input_folder}/. {container_id}:{output_folder}"
-    subprocess.run(copy_cmd, shell=True, check=True)
-
-    print(f"Contents of '{input_folder}' have been copied to '{output_folder}' in container '{container_id}'")
+    try:
+        if not os.path.exists(input_folder):
+            raise ValueError(f"Input folder '{input_folder}' does not exist")
+        
+        print(f"output_folder : {output_folder}")
+        
+        # Get Docker client
+        client = get_docker_client()
+        if not client:
+            raise Exception("Failed to initialize Docker client")
+            
+        try:
+            container = client.containers.get(container_id)
+        except docker.errors.NotFound:
+            raise Exception(f"Container '{container_id}' not found")
+            
+        # Create output directory in container
+        try:
+            container.exec_run(f"mkdir -p {output_folder}")
+        except Exception as e:
+            print(f"Warning: mkdir command failed: {e}")
+            # Continue anyway as the folder might already exist
+        
+        # Use docker cp command as fallback
+        copy_cmd = f"docker cp {input_folder}/. {container_id}:{output_folder}"
+        result = subprocess.run(copy_cmd, shell=True, capture_output=True, text=True)
+        
+        if result.returncode != 0:
+            raise Exception(f"Copy failed: {result.stderr}")
+            
+        print(f"Contents of '{input_folder}' have been copied to '{output_folder}' in container '{container_id}'")
+        
+    except Exception as e:
+        print(f"Error in copy_folder_to_docker: {str(e)}")
+        raise
 
 def prepare_docker_environment(question_id, zip_path, container_id):
-    # Get folder location from CSV
-    folder = get_question_details(question_id, "question_folder_location")
-    if not folder:
-        print(f"Could not find folder location for question ID: {question_id}")
-        return
-    
-    # Clean workspace
-    if check_and_delete_folder("./workspace"):
-        print("Workspace cleaned.")
-    else:
-        print("Workspace could not be cleaned or does not exist.")
-    
-    # Extract code from ZIP
-    output_folder = extract_zip(zip_path)
-    if not output_folder:
-        print("Failed to extract ZIP. Aborting Docker preparation.")
-        return
-    
-    # Copy to Docker
     try:
-        copy_folder_to_docker(container_id, output_folder, folder)
+        # Get folder location from CSV
+        folder = get_question_details(question_id, "question_folder_location")
+        if not folder:
+            print(f"Could not find folder location for question ID: {question_id}")
+            return
+        
+        print(f"Found folder location: {folder}")
+        
+        # Clean workspace
+        if check_and_delete_folder("./workspace"):
+            print("Workspace cleaned.")
+        else:
+            print("Workspace could not be cleaned.")
+            return
+        
+        # Extract code from ZIP
+        output_folder = extract_zip(zip_path)
+        if not output_folder:
+            print("Failed to extract ZIP. Aborting Docker preparation.")
+            return
+        
+        # Copy to Docker
+        try:
+            copy_folder_to_docker(container_id, output_folder, folder)
+        except Exception as e:
+            print(f"Failed to copy folder to Docker: {e}")
+            return
+            
+        print("Docker environment prepared successfully")
+        
     except Exception as e:
-        print(f"Failed to copy folder to Docker: {e}")
+        print(f"Error in prepare_docker_environment: {str(e)}")
+        raise
