@@ -5,18 +5,10 @@ import pandas as pd
 from zipfile import ZipFile, BadZipFile
 import subprocess
 import shutil
-import docker
 from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
-
-def get_docker_client():
-    try:
-        return docker.from_env()
-    except Exception as e:
-        print(f"Failed to initialize Docker client: {e}")
-        return None
 
 def get_question_details(question_id, column_name):
     csv_file_path = 'commands.csv' 
@@ -86,29 +78,30 @@ def copy_folder_to_docker(container_id, input_folder, output_folder):
         
         print(f"output_folder : {output_folder}")
         
-        # Get Docker client
-        client = get_docker_client()
-        if not client:
-            raise Exception("Failed to initialize Docker client")
-            
-        try:
-            container = client.containers.get(container_id)
-        except docker.errors.NotFound:
-            raise Exception(f"Container '{container_id}' not found")
-            
-        # Create output directory in container
-        try:
-            container.exec_run(f"mkdir -p {output_folder}")
-        except Exception as e:
-            print(f"Warning: mkdir command failed: {e}")
-            # Continue anyway as the folder might already exist
-        
-        # Use docker cp command as fallback
-        copy_cmd = f"docker cp {input_folder}/. {container_id}:{output_folder}"
-        result = subprocess.run(copy_cmd, shell=True, capture_output=True, text=True)
+        # Try creating directory with root user
+        mkdir_cmd = f"docker exec --user root {container_id} mkdir -p {output_folder}"
+        result = subprocess.run(mkdir_cmd, shell=True, capture_output=True, text=True)
         
         if result.returncode != 0:
-            raise Exception(f"Copy failed: {result.stderr}")
+            print(f"Warning: mkdir command failed: {result.stderr}")
+            # Try alternative approach
+            alt_cmd = f"docker exec {container_id} sh -c 'mkdir -p {output_folder}'"
+            alt_result = subprocess.run(alt_cmd, shell=True, capture_output=True, text=True)
+            if alt_result.returncode != 0:
+                raise Exception(f"Failed to create directory: {alt_result.stderr}")
+        
+        # Set permissions on the directory
+        chmod_cmd = f"docker exec --user root {container_id} chmod -R 777 {output_folder}"
+        chmod_result = subprocess.run(chmod_cmd, shell=True, capture_output=True, text=True)
+        if chmod_result.returncode != 0:
+            print(f"Warning: chmod command failed: {chmod_result.stderr}")
+        
+        # Copy files to Docker container
+        copy_cmd = f"docker cp {input_folder}/. {container_id}:{output_folder}"
+        copy_result = subprocess.run(copy_cmd, shell=True, capture_output=True, text=True)
+        
+        if copy_result.returncode != 0:
+            raise Exception(f"Copy failed: {copy_result.stderr}")
             
         print(f"Contents of '{input_folder}' have been copied to '{output_folder}' in container '{container_id}'")
         
@@ -142,11 +135,10 @@ def prepare_docker_environment(question_id, zip_path, container_id):
         # Copy to Docker
         try:
             copy_folder_to_docker(container_id, output_folder, folder)
+            print("Docker environment prepared successfully")
         except Exception as e:
             print(f"Failed to copy folder to Docker: {e}")
             return
-            
-        print("Docker environment prepared successfully")
         
     except Exception as e:
         print(f"Error in prepare_docker_environment: {str(e)}")
