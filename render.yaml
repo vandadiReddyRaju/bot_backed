@@ -1,0 +1,22 @@
+services:
+  # Backend API service
+  - type: web
+    name: ide-mentor-bot-api
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn main:app
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.9.0
+      - key: OPENAI_API_KEY
+        sync: false
+    
+  # Frontend static site
+  - type: web
+    name: ide-mentor-bot-frontend
+    env: static
+    buildCommand: cd frontend && npm install && npm run build
+    staticPublishPath: ./frontend/build
+    envVars:
+      - key: NODE_VERSION
+        value: 16.0.0

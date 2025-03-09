@@ -1,0 +1,8 @@
+openai
+pandas
+Pillow
+beautifulsoup4==4.12.3
+requests
+gunicorn==21.2.0
+flask-cors==4.0.0
+flask==3.0.0
