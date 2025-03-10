@@ -61,7 +61,7 @@ def llm_call(system_prompt, user_prompt):
         
         client = OpenAI(
             base_url="https://openrouter.ai/api/v1",
-            api_key="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",
+            api_key=api_key,
         )
                     
         completion = client.chat.completions.create(
@@ -104,7 +104,7 @@ def llm_call_with_image(system_prompt, user_prompt_text, user_base_64_imgs):
             
         client = OpenAI(
             base_url="https://openrouter.ai/api/v1",
-            api_key="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",
+            api_key=api_key,
         )
                     
         completion = client.chat.completions.create(
