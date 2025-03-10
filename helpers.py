@@ -65,7 +65,7 @@ def llm_call(system_prompt, user_prompt):
         )
                     
         completion = client.chat.completions.create(
-            model="deepseek/deepseek-r1-distill-llama-70b:free",
+            model="deepseek/deepseek-r1",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
@@ -112,7 +112,7 @@ def llm_call_with_image(system_prompt, user_prompt_text, user_base_64_imgs):
                 "HTTP-Referer": "https://github.com/ranjithkumarkurva",
                 "X-Title": "IDE-Mentor-Bot",
             },
-            model="deepseek/deepseek-r1-distill-llama-70b:free",
+            model="deepseek/deepseek-r1",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt_content}
