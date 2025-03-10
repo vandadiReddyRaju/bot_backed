@@ -5,17 +5,24 @@ import pandas as pd
 from zipfile import ZipFile, BadZipFile
 import subprocess
 import shutil
+import time
 from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
 
-def check_docker_available():
-    try:
-        result = subprocess.run(['docker', '--version'], capture_output=True, text=True)
-        return result.returncode == 0
-    except FileNotFoundError:
-        return False
+def wait_for_docker(timeout=30):
+    """Wait for Docker to become available"""
+    start_time = time.time()
+    while time.time() - start_time < timeout:
+        try:
+            result = subprocess.run('docker ps', shell=True, capture_output=True, text=True)
+            if result.returncode == 0:
+                return True
+            time.sleep(2)
+        except Exception:
+            time.sleep(2)
+    return False
 
 def get_question_details(question_id, column_name):
     csv_file_path = 'commands.csv' 
@@ -80,8 +87,9 @@ def extract_zip(zip_path, output_folder="./workspace"):
 
 def copy_folder_to_docker(container_id, input_folder, output_folder):
     try:
-        if not check_docker_available():
-            raise Exception("Docker is not installed or not accessible. Please ensure Docker is properly installed and running.")
+        # Wait for Docker to become available
+        if not wait_for_docker():
+            raise Exception("Docker is not available after waiting. Please check if Docker is properly installed and running.")
 
         if not os.path.exists(input_folder):
             raise ValueError(f"Input folder '{input_folder}' does not exist")
@@ -95,22 +103,16 @@ def copy_folder_to_docker(container_id, input_folder, output_folder):
             raise Exception(f"Container '{container_id}' does not exist or is not accessible")
         
         # Try creating directory with root user
-        mkdir_cmd = f"docker exec --user root {container_id} mkdir -p {output_folder}"
+        mkdir_cmd = f"docker exec --user root {container_id} sh -c 'mkdir -p {output_folder} && chmod -R 777 {output_folder}'"
         result = subprocess.run(mkdir_cmd, shell=True, capture_output=True, text=True)
         
         if result.returncode != 0:
             print(f"Warning: mkdir command failed: {result.stderr}")
             # Try alternative approach
-            alt_cmd = f"docker exec {container_id} sh -c 'mkdir -p {output_folder}'"
+            alt_cmd = f"docker exec {container_id} sh -c 'mkdir -p {output_folder} && chmod -R 777 {output_folder}'"
             alt_result = subprocess.run(alt_cmd, shell=True, capture_output=True, text=True)
             if alt_result.returncode != 0:
                 raise Exception(f"Failed to create directory: {alt_result.stderr}")
-        
-        # Set permissions on the directory
-        chmod_cmd = f"docker exec --user root {container_id} chmod -R 777 {output_folder}"
-        chmod_result = subprocess.run(chmod_cmd, shell=True, capture_output=True, text=True)
-        if chmod_result.returncode != 0:
-            print(f"Warning: chmod command failed: {chmod_result.stderr}")
         
         # Copy files to Docker container
         copy_cmd = f"docker cp {input_folder}/. {container_id}:{output_folder}"
@@ -127,9 +129,9 @@ def copy_folder_to_docker(container_id, input_folder, output_folder):
 
 def prepare_docker_environment(question_id, zip_path, container_id):
     try:
-        # Check Docker availability first
-        if not check_docker_available():
-            print("Docker is not installed or not accessible. Please ensure Docker is properly installed and running.")
+        # Wait for Docker to become available
+        if not wait_for_docker():
+            print("Docker is not available after waiting. Please check if Docker is properly installed and running.")
             return
             
         # Get folder location from CSV
