@@ -1,16 +1,24 @@
 # Use Python base image
 FROM python:3.9-slim
 
-# Install system dependencies
+# Install system dependencies including Docker
 RUN apt-get update && apt-get install -y \
-    docker.io \
+    curl \
+    apt-transport-https \
+    ca-certificates \
+    gnupg \
+    lsb-release \
+    && curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg \
+    && echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/debian $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null \
+    && apt-get update \
+    && apt-get install -y docker-ce docker-ce-cli containerd.io \
     && rm -rf /var/lib/apt/lists/*
+
+# Create workspace directory and set permissions
+RUN mkdir -p /home/workspace && chmod -R 777 /home/workspace
 
 # Set working directory
 WORKDIR /app
-
-# Create workspace directory
-RUN mkdir -p /home/workspace
 
 # Copy requirements first to leverage Docker cache
 COPY requirements.txt .
@@ -26,9 +34,6 @@ ENV WORKSPACE_ROOT=/home/workspace
 ENV DOCKER_WORKSPACE=/home/workspace
 ENV PORT=5000
 ENV HOST=0.0.0.0
-
-# Create and set permissions for workspace
-RUN chmod -R 777 /home/workspace
 
 # Expose port 5000
 EXPOSE 5000

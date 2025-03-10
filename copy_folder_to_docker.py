@@ -78,33 +78,27 @@ def copy_folder_to_docker(container_id, input_folder, output_folder):
         
         print(f"output_folder : {output_folder}")
         
-        # Try creating directory with root user
-        mkdir_cmd = f"docker exec --user root {container_id} mkdir -p {output_folder}"
-        result = subprocess.run(mkdir_cmd, shell=True, capture_output=True, text=True)
+        # Create the output directory
+        os.makedirs(output_folder, exist_ok=True)
         
-        if result.returncode != 0:
-            print(f"Warning: mkdir command failed: {result.stderr}")
-            # Try alternative approach
-            alt_cmd = f"docker exec {container_id} sh -c 'mkdir -p {output_folder}'"
-            alt_result = subprocess.run(alt_cmd, shell=True, capture_output=True, text=True)
-            if alt_result.returncode != 0:
-                raise Exception(f"Failed to create directory: {alt_result.stderr}")
-        
-        # Set permissions on the directory
-        chmod_cmd = f"docker exec --user root {container_id} chmod -R 777 {output_folder}"
-        chmod_result = subprocess.run(chmod_cmd, shell=True, capture_output=True, text=True)
-        if chmod_result.returncode != 0:
-            print(f"Warning: chmod command failed: {chmod_result.stderr}")
-        
-        # Copy files to Docker container
-        copy_cmd = f"docker cp {input_folder}/. {container_id}:{output_folder}"
-        copy_result = subprocess.run(copy_cmd, shell=True, capture_output=True, text=True)
-        
-        if copy_result.returncode != 0:
-            raise Exception(f"Copy failed: {copy_result.stderr}")
+        # Copy the contents using shutil
+        try:
+            if os.path.exists(output_folder):
+                shutil.rmtree(output_folder)
+            shutil.copytree(input_folder, output_folder)
+            # Set permissions
+            for root, dirs, files in os.walk(output_folder):
+                os.chmod(root, 0o777)
+                for d in dirs:
+                    os.chmod(os.path.join(root, d), 0o777)
+                for f in files:
+                    os.chmod(os.path.join(root, f), 0o777)
+            print(f"Contents of '{input_folder}' have been copied to '{output_folder}'")
+            return True
+        except Exception as e:
+            print(f"Error copying files: {str(e)}")
+            raise
             
-        print(f"Contents of '{input_folder}' have been copied to '{output_folder}' in container '{container_id}'")
-        
     except Exception as e:
         print(f"Error in copy_folder_to_docker: {str(e)}")
         raise
@@ -132,12 +126,12 @@ def prepare_docker_environment(question_id, zip_path, container_id):
             print("Failed to extract ZIP. Aborting Docker preparation.")
             return
         
-        # Copy to Docker
+        # Copy to destination
         try:
             copy_folder_to_docker(container_id, output_folder, folder)
-            print("Docker environment prepared successfully")
+            print("Environment prepared successfully")
         except Exception as e:
-            print(f"Failed to copy folder to Docker: {e}")
+            print(f"Failed to copy folder: {e}")
             return
         
     except Exception as e:
