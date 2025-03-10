@@ -57,7 +57,6 @@ def llm_call(system_prompt, user_prompt):
         logger.info("Calling OpenRouter API...")
         
         api_key = get_api_key()
-        openai.api_key = api_key
         
         client = OpenAI(
             base_url="https://openrouter.ai/api/v1",
@@ -70,7 +69,6 @@ def llm_call(system_prompt, user_prompt):
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
             ],
-            temperature=0.2
         )
 
         if completion.choices:
@@ -117,7 +115,6 @@ def llm_call_with_image(system_prompt, user_prompt_text, user_base_64_imgs):
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt_content}
             ],
-            temperature=0.2
         )
 
         if completion.choices:
