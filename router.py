@@ -69,7 +69,6 @@ class QueryRouter:
             self.parse_query()
             
             if not self.query_text:
-                logger.warning("Empty query text after parsing")
                 self.query_text = "Please provide your question or describe the issue you're facing."
                 
             result = llm_call_with_image(
@@ -79,27 +78,14 @@ class QueryRouter:
             )
             
             if not result:
-                logger.error("Empty response from LLM")
                 return "other"
                 
             try:
                 res_json = json.loads(result.replace("```json", "").replace("```", ""))
-            except json.JSONDecodeError as e:
-                logger.error(f"Error parsing LLM response: {str(e)}")
+                query_category = res_json.get('query_category', 'other').strip()
+                return query_category
+            except:
                 return "other"
-                
-            # Update query context with error description if available
-            if "error_description" in res_json and res_json['error_description']:
-                self.updated_query_context = (
-                    f"Query Summary: {res_json.get('user_query_summary', '')}, "
-                    f"Error Description: {res_json['error_description']}"
-                )
-            else:
-                self.updated_query_context = f"Query Summary: {res_json.get('user_query_summary', '')}"
-                
-            query_category = res_json.get('query_category', 'other').strip()
-            logger.info(f"Query classified as: {query_category}")
-            return query_category
             
         except Exception as e:
             logger.error(f"Error classifying query: {str(e)}")

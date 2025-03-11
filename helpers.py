@@ -54,53 +54,35 @@ def parse_html_to_dict(html_text):
 def llm_call(system_prompt, user_prompt):
     """Make an API call to the LLM service."""
     try:
-        logger.info("Calling OpenRouter API...")
-        
         api_key = get_api_key()
-        
         client = OpenAI(
             base_url="https://openrouter.ai/api/v1",
-            api_key=api_key,
-            timeout=60
+            api_key=api_key
         )
-                    
+        
         completion = client.chat.completions.create(
             model="deepseek/deepseek-r1-zero:free",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
-            ],
+            ]
         )
 
-        if completion and completion.choices:
-            result = completion.choices[0].message.content
-            logger.info("Successfully received response from OpenRouter")
-            return result
-        else:
-            logger.error("No response received from the AI model")
-            return "Error: No response received from the AI model. Please try again."
+        return completion.choices[0].message.content if completion.choices else None
 
-    except openai.APITimeoutError as e:
-        logger.error(f"API timeout error: {str(e)}")
-        return "Error: Request timed out. Please try again."
-    except openai.APIConnectionError as e:
-        logger.error(f"API connection error: {str(e)}")
-        return "Error: Failed to connect to the API. Please check your internet connection."
-    except openai.APIError as e:
-        logger.error(f"OpenRouter API error: {str(e)}")
-        return "Error: An error occurred while processing your request. Please try again."
     except Exception as e:
         logger.error(f"Error calling OpenRouter API: {str(e)}")
-        return f"Error: {str(e)}"
+        return None
 
 def llm_call_with_image(system_prompt, user_prompt_text, user_base_64_imgs):
     """Make an API call to the LLM service with image content."""
     try:
-        logger.info("Calling OpenRouter API with images...")
-        
         api_key = get_api_key()
-
-        # Prepare the messages with images
+        client = OpenAI(
+            base_url="https://openrouter.ai/api/v1",
+            api_key=api_key
+        )
+        
         user_prompt_content = [{"type": "text", "text": user_prompt_text}]
         for img in user_base_64_imgs:
             img_content = {
@@ -111,40 +93,19 @@ def llm_call_with_image(system_prompt, user_prompt_text, user_base_64_imgs):
             }
             user_prompt_content.append(img_content)
             
-        client = OpenAI(
-            base_url="https://openrouter.ai/api/v1",
-            api_key=api_key,
-            timeout=60
-        )
-                    
         completion = client.chat.completions.create(
             model="deepseek/deepseek-r1-zero:free",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt_content}
-            ],
+            ]
         )
 
-        if completion and completion.choices:
-            result = completion.choices[0].message.content
-            logger.info("Successfully received response from OpenRouter")
-            return result
-        else:
-            logger.error("No response received from the AI model")
-            return "Error: No response received from the AI model. Please try again."
+        return completion.choices[0].message.content if completion.choices else None
 
-    except openai.APITimeoutError as e:
-        logger.error(f"API timeout error: {str(e)}")
-        return "Error: Request timed out. Please try again."
-    except openai.APIConnectionError as e:
-        logger.error(f"API connection error: {str(e)}")
-        return "Error: Failed to connect to the API. Please check your internet connection."
-    except openai.APIError as e:
-        logger.error(f"OpenRouter API error: {str(e)}")
-        return "Error: An error occurred while processing your request. Please try again."
     except Exception as e:
         logger.error(f"Error calling OpenRouter API with images: {str(e)}")
-        return f"Error: {str(e)}"
+        return None
 
 def download_image(url):
     """Download an image from a URL and save it temporarily."""
