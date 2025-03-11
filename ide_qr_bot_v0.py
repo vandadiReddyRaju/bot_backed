@@ -32,16 +32,28 @@ class QRBot:
         
         # Get question details from CSV
         try:
+            logger.info(f"Looking up question ID: {question_id}")
             df = pd.read_csv('commands.csv')
+            # Look up by question_command_id
             result = df[df['question_command_id'] == question_id]
             if not result.empty:
                 self.folder_location = result['question_folder_location'].iloc[0]
                 self.question_content = result['question_content'].iloc[0] if 'question_content' in result.columns else ""
                 self.question_test_cases = result['test_cases'].iloc[0] if 'test_cases' in result.columns else ""
                 logger.info(f"Found question details for ID: {question_id}")
+                logger.info(f"Folder location: {self.folder_location}")
             else:
-                logger.warning(f"Could not find question details for ID: {question_id}")
-                self.folder_location = None
+                # Try looking up by question_id as fallback
+                result = df[df['question_id'] == question_id]
+                if not result.empty:
+                    self.folder_location = result['question_folder_location'].iloc[0]
+                    self.question_content = result['question_content'].iloc[0] if 'question_content' in result.columns else ""
+                    self.question_test_cases = result['test_cases'].iloc[0] if 'test_cases' in result.columns else ""
+                    logger.info(f"Found question details using question_id: {question_id}")
+                    logger.info(f"Folder location: {self.folder_location}")
+                else:
+                    logger.warning(f"Could not find question details for ID: {question_id}")
+                    self.folder_location = None
         except Exception as e:
             logger.error(f"Error getting question details: {e}")
             self.folder_location = None

@@ -44,8 +44,9 @@ def extract_zip(zip_path, extract_path):
 def get_question_id_from_filename(filename):
     """Extract question ID from filename."""
     try:
-        # Assuming filename format: questionID_rest_of_filename.zip
-        question_id = filename.split('_')[0]
+        # Remove .zip extension if present
+        question_id = filename.replace('.zip', '')
+        logger.info(f"Extracted question ID: {question_id}")
         return question_id
     except Exception as e:
         logger.error(f"Error extracting question ID from filename: {str(e)}")
