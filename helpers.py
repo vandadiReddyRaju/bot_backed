@@ -61,6 +61,7 @@ def llm_call(system_prompt, user_prompt):
         client = OpenAI(
             base_url="https://openrouter.ai/api/v1",
             api_key=api_key,
+            timeout=60
         )
                     
         completion = client.chat.completions.create(
@@ -71,16 +72,26 @@ def llm_call(system_prompt, user_prompt):
             ],
         )
 
-        if completion.choices:
+        if completion and completion.choices:
             result = completion.choices[0].message.content
+            logger.info("Successfully received response from OpenRouter")
             return result
         else:
             logger.error("No response received from the AI model")
-            return None
+            return "Error: No response received from the AI model. Please try again."
 
+    except openai.APITimeoutError as e:
+        logger.error(f"API timeout error: {str(e)}")
+        return "Error: Request timed out. Please try again."
+    except openai.APIConnectionError as e:
+        logger.error(f"API connection error: {str(e)}")
+        return "Error: Failed to connect to the API. Please check your internet connection."
+    except openai.APIError as e:
+        logger.error(f"OpenRouter API error: {str(e)}")
+        return "Error: An error occurred while processing your request. Please try again."
     except Exception as e:
         logger.error(f"Error calling OpenRouter API: {str(e)}")
-        raise
+        return f"Error: {str(e)}"
 
 def llm_call_with_image(system_prompt, user_prompt_text, user_base_64_imgs):
     """Make an API call to the LLM service with image content."""
@@ -103,6 +114,7 @@ def llm_call_with_image(system_prompt, user_prompt_text, user_base_64_imgs):
         client = OpenAI(
             base_url="https://openrouter.ai/api/v1",
             api_key=api_key,
+            timeout=60
         )
                     
         completion = client.chat.completions.create(
@@ -113,16 +125,26 @@ def llm_call_with_image(system_prompt, user_prompt_text, user_base_64_imgs):
             ],
         )
 
-        if completion.choices:
+        if completion and completion.choices:
             result = completion.choices[0].message.content
+            logger.info("Successfully received response from OpenRouter")
             return result
         else:
             logger.error("No response received from the AI model")
-            return None
+            return "Error: No response received from the AI model. Please try again."
 
+    except openai.APITimeoutError as e:
+        logger.error(f"API timeout error: {str(e)}")
+        return "Error: Request timed out. Please try again."
+    except openai.APIConnectionError as e:
+        logger.error(f"API connection error: {str(e)}")
+        return "Error: Failed to connect to the API. Please check your internet connection."
+    except openai.APIError as e:
+        logger.error(f"OpenRouter API error: {str(e)}")
+        return "Error: An error occurred while processing your request. Please try again."
     except Exception as e:
         logger.error(f"Error calling OpenRouter API with images: {str(e)}")
-        raise
+        return f"Error: {str(e)}"
 
 def download_image(url):
     """Download an image from a URL and save it temporarily."""
