@@ -21,6 +21,12 @@ class QueryRouter:
     def parse_query(self):
         """Parse HTML query and extract text and images."""
         try:
+            # If query is not HTML, treat it as plain text
+            if not self.query.strip().startswith('<'):
+                self.query_text = self.query.strip()
+                logger.info(f"Processing plain text query: {self.query_text}")
+                return
+                
             text, imgs = parse_html_to_dict(self.query)
             image_strings = []
             
@@ -40,13 +46,14 @@ class QueryRouter:
                     logger.error(f"Error processing image {img}: {str(e)}")
                     continue
                     
-            self.query_text = text
+            self.query_text = text.strip()
             self.query_imgs = image_strings
             logger.info(f"Successfully parsed query with {len(image_strings)} images")
             
         except Exception as e:
             logger.error(f"Error parsing query: {str(e)}")
-            self.query_text = self.query
+            # Fallback to treating query as plain text
+            self.query_text = self.query.strip()
             self.query_imgs = []
         finally:
             if self.temp_dir and os.path.exists(self.temp_dir):
@@ -61,9 +68,9 @@ class QueryRouter:
         try:
             self.parse_query()
             
-            if not self.query_text.strip():
+            if not self.query_text:
                 logger.warning("Empty query text after parsing")
-                return "other"
+                self.query_text = "Please provide your question or describe the issue you're facing."
                 
             result = llm_call_with_image(
                 get_query_classification_prompt(),
