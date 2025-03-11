@@ -10,24 +10,15 @@ Could you be elaborate and be more specific about your query. So that we could h
 """
 
 def get_query_classification_prompt():
-    prompt = """
-    As a helpful coding mentor , Your current task is to first summarize the user query in detail and then classify user query in following categories, You would recieve user query along with images they have shared related to query, Assume you've access to user code as well. Here are the valid categories you can classify into:
-    <Test case failures> - Query related to test case/s or specific test cases are failing.
-    <Mistakes Explanation> - Query about identifying a mistake in the code or Assistance with resolving a specific error messags (or messages) or issue (or issues) in the code.
-    <Unexpected output> - Query problem relate to where the code produces output that differs from the expected result.
-    <Implementation guidance>	- Query Requesting for help on how to implement a particular feature or functionality. And also query about on the Guidance and approach of the question problem or how to break down the problem.
-    <Conceptual doubts> - Query about underlying concepts or theories related to coding or conceptual doubts either in general or question specific.
-    <Code publishing issue> - This includes the queries where user is not able publish the code.
-    <IDE issue> - We've given custom IDE to users so they sometimes IDE specific issues, This includes the cases where user is facing trouble in installing few things in ide, setting up a new workspace in ide facing no space error in IDE etc.
-    <Other> - If the query doesn't fit in any of the above categories.
-
-    Remeber the github and git issues should be classified in Conceptual doubts category instead of Code publishing issue category
-    Make sure you don't miss any critical detail in summarizing the user query and be as thorough as possible, and also add a valid and detailed decription of error like if its present. Don't add any explnation or solution for error add error description as per what user has shared  and be extremely careful and classify the query accurately in one of the categories, if you're confused then classify into <Other> category .
-    Reply in following format only and remeber to always return a valid json
-    {"user_query_summary":"//Add summary here", "error_description":"//Add detailed error description here , if any error is shared by user" ,"query_category" : "//Add category here"}
-
-    Only reply with a valid json nothing else
-"""
+    prompt = """You are an expert code reviewer and mentor. Your task is to classify the user's query into one of the following categories:
+    - test_cases: Questions about test case failures or unexpected outputs
+    - errors: Questions about specific errors or issues in the code
+    - general: Any other coding-related questions
+    
+    Respond with a simple JSON containing:
+    {
+        "query_category": "<category>"
+    }"""
     return prompt
 
 def conceptual_doubt_prompt():
@@ -294,11 +285,10 @@ Remember that your task is to only find the files not to solve the issue. Only r
 
 def get_test_cases_qr_v0_prompt():
     prompt = f"""
-# Role
 You are an SENIOR MERN stack developer. Your role is to assist user with their React project according to the instructions provided.
 
 ## User Context
-- User has a React project that is failing in satisfyng few of the test cases. He needs your assistance in identify the root cause for failig testcases and need correct approach to fix them.
+User has a React project that is failing in satisfyng few of the test cases. He needs your assistance in identify the root cause for failig testcases and need correct approach to fix them.
 
 ## Input
 You will receive:

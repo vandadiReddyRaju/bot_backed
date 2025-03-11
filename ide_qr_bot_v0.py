@@ -59,84 +59,31 @@ class QRBot:
             self.folder_location = None
 
     def get_bot_response(self):
-        if not self.folder_location:
-            return "Error: Could not find question details for the given question ID"
-            
+        """Get bot response based on the query category."""
         try:
-            self.query_category = self.query_router.classify_query().strip()
-            if self.query_category == "other":
-                return "<mentor_required>"
-                
-            logger.info(f"Query Category: {self.query_category}")
-            check_and_delete_folder("./workspace")
+            # Get query category
+            self.query_category = self.query_router.classify_query()
             
-            # Extract and prepare Docker environment
-            if self.zip_path:
-                try:
-                    copy_folder_to_docker(self.container_id, self.zip_path, self.folder_location)
-                    self.repo_state = extract_file_contents_with_tree("./workspace", full_desc=True)
-                except Exception as e:
-                    logger.error(f"Error setting up Docker environment: {e}")
-                    return "Error: Unable to set up the development environment. Please try again later."
-            
-            return self._generate_bot_response_based_on_category()
-            
-        except Exception as e:
-            logger.error(f"Error in get_bot_response: {e}")
-            return "Error: Something went wrong while processing your request. Please try again later."
-    
-    def _generate_bot_response_based_on_category(self):
-        try:
-            if "Test case failures" in self.query_category or \
-               "Unexpected output" in self.query_category or \
-               "Mistakes Explanation" in self.query_category:
-                
-                if not self.zip_path:
-                    return "<please_attach_code_response>"
-                
-                # Prepare issue context with question details
-                test_cases = self.question_test_cases
-                context = {
-                    "user_query": self.query_router.updated_query_context,
-                    "student_code": self.repo_state,
-                    "test_cases": test_cases,
-                    "question_content": self.question_content
-                }
-                issue_context = f"""
-                User Query: {context['user_query']}
-                Question: {context['question_content']}
-                Student Code: {context['student_code']}
-                Test Cases: {context['test_cases']}
-                """
-                logger.info("Sending test case analysis request to LLM")
-                return llm_call(get_test_cases_qr_v0_prompt(), issue_context)
-
-            elif "Fix specific errors" in self.query_category:
-                if not self.zip_path:
-                    return "<please_attach_code_response>"
-                    
-                issue_context = f"""
+            if self.question_content:
+                system_prompt = f"""You are an expert code reviewer and mentor. 
                 Question: {self.question_content}
-                Student Code: {self.repo_state}
-                Issue: {self.query_router.updated_query_context}
-                """
-                logger.info("Sending error analysis request to LLM")
-                return llm_call(get_specific_errors_qr_v0_prompt(), issue_context)
-
-            elif "Code publishing issue" in self.query_category:
-                logger.info("Sending publishing issue request to LLM")
-                return llm_call(get_publishing_related_query_system_prompt(),
-                              f"User Query: {self.query_router.updated_query_context}")
-
-            elif "IDE related issue" in self.query_category:
-                logger.info("Sending IDE issue request to LLM")
-                return llm_call(get_ide_related_queries_system_prompt(),
-                              f"User Query: {self.query_router.updated_query_context}")
-
-            else:
-                logger.warning(f"Unhandled query category: {self.query_category}")
-                return "<mentor_required>"
-
+                Test Cases: {self.question_test_cases}
+                Category: {self.query_category}
+                
+                Analyze the code and provide a helpful response focusing on the specific query category."""
+                
+                user_prompt = f"Query: {self.user_query}"
+                
+                response = llm_call(system_prompt, user_prompt)
+                if response:
+                    return response
+            
+            # Fallback to generic response
+            system_prompt = "You are an expert code reviewer. Analyze the code and provide a helpful response."
+            user_prompt = f"Query: {self.user_query}"
+            
+            return llm_call(system_prompt, user_prompt)
+            
         except Exception as e:
-            logger.error(f"Error generating bot response: {e}")
-            return "Error: Unable to generate response. Please try again later."
+            logger.error(f"Error getting bot response: {str(e)}")
+            return None

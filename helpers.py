@@ -57,7 +57,8 @@ def llm_call(system_prompt, user_prompt):
         api_key = get_api_key()
         client = OpenAI(
             base_url="https://openrouter.ai/api/v1",
-            api_key=api_key
+            api_key=api_key,
+            default_headers={"HTTP-Referer": "https://github.com/vandadiReddyRaju/bot_backed"}
         )
         
         completion = client.chat.completions.create(
@@ -80,7 +81,8 @@ def llm_call_with_image(system_prompt, user_prompt_text, user_base_64_imgs):
         api_key = get_api_key()
         client = OpenAI(
             base_url="https://openrouter.ai/api/v1",
-            api_key=api_key
+            api_key=api_key,
+            default_headers={"HTTP-Referer": "https://github.com/vandadiReddyRaju/bot_backed"}
         )
         
         user_prompt_content = [{"type": "text", "text": user_prompt_text}]
