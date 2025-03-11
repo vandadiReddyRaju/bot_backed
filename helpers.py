@@ -28,7 +28,7 @@ load_dotenv()
 
 def get_api_key():
     """Get API key from environment variables."""
-    api_key = os.getenv('OPENAI_API_KEY')  
+    api_key = os.getenv('api_key')  
     if not api_key:
         logger.error("API key not found in environment variables")
         raise ValueError("OPENAI_API_KEY not found in environment variables")
