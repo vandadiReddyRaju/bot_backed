@@ -29,12 +29,8 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 
 def get_api_key():
-    """Safely retrieve API key from environment variables."""
-    api_key = os.getenv("api_key")
-    if not api_key:
-        logger.error("API key not found in environment variables")
-        raise ValueError("API key not configured")
-    return api_key
+    """Get API key from environment variables."""
+    return os.getenv('OPENROUTER_API_KEY')
 
 def parse_html_to_dict(html_text):
     """Parse HTML content to extract text and image links."""
@@ -58,7 +54,10 @@ def llm_call(system_prompt, user_prompt):
         client = OpenAI(
             base_url="https://openrouter.ai/api/v1",
             api_key=api_key,
-            default_headers={"HTTP-Referer": "https://github.com/vandadiReddyRaju/bot_backed"}
+            default_headers={
+                "HTTP-Referer": "https://github.com/vandadiReddyRaju/bot_backed",
+                "OpenAI-Organization": "vandadireddyraju"
+            }
         )
         
         completion = client.chat.completions.create(
@@ -82,25 +81,29 @@ def llm_call_with_image(system_prompt, user_prompt_text, user_base_64_imgs):
         client = OpenAI(
             base_url="https://openrouter.ai/api/v1",
             api_key=api_key,
-            default_headers={"HTTP-Referer": "https://github.com/vandadiReddyRaju/bot_backed"}
+            default_headers={
+                "HTTP-Referer": "https://github.com/vandadiReddyRaju/bot_backed",
+                "OpenAI-Organization": "vandadireddyraju"
+            }
         )
         
-        user_prompt_content = [{"type": "text", "text": user_prompt_text}]
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": [{"type": "text", "text": user_prompt_text}]}
+        ]
+        
+        # Add images to the user message
         for img in user_base_64_imgs:
-            img_content = {
+            messages[-1]["content"].append({
                 "type": "image_url",
                 "image_url": {
                     "url": f"data:image/{img['extension']};base64,{img['content']}"
                 }
-            }
-            user_prompt_content.append(img_content)
+            })
             
         completion = client.chat.completions.create(
             model="deepseek/deepseek-r1-zero:free",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt_content}
-            ]
+            messages=messages
         )
 
         return completion.choices[0].message.content if completion.choices else None
