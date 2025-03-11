@@ -1,134 +1,45 @@
+
 from helpers import parse_html_to_dict
-from helpers import download_image, encode_image_to_base64, llm_call_with_image
+from helpers import download_image,encode_image_to_base64,llm_call_with_image
 from prompts import get_query_classification_prompt
 import json
-import logging
-import os
-import tempfile
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 class QueryRouter: 
-    def __init__(self, query):
+    def __init__(self,query):
         self.query = query
         self.query_text = ""
-        self.query_imgs = []
+        self.query_imgs = ""
         self.updated_query_context = ""
-        self.temp_dir = None
     
     def parse_query(self):
-        """Parse HTML query and extract text and images."""
-        try:
-            # If query is not HTML, treat it as plain text
-            if not self.query.strip().startswith('<'):
-                self.query_text = self.query.strip()
-                logger.info(f"Processing plain text query: {self.query_text}")
-                return
-                
-            text, imgs = parse_html_to_dict(self.query)
-            image_strings = []
-            
-            if imgs:
-                self.temp_dir = tempfile.mkdtemp()
-                
-            for img in imgs:
-                try:
-                    image_path = download_image(img, save_dir=self.temp_dir)
-                    if image_path:
-                        image_base64, image_format = encode_image_to_base64(image_path)
-                        image_strings.append({
-                            "extension": image_format,
-                            "content": image_base64
-                        })
-                except Exception as e:
-                    logger.error(f"Error processing image {img}: {str(e)}")
-                    continue
-                    
-            self.query_text = text.strip()
-            self.query_imgs = image_strings
-            logger.info(f"Successfully parsed query with {len(image_strings)} images")
-            
-        except Exception as e:
-            logger.error(f"Error parsing query: {str(e)}")
-            # Fallback to treating query as plain text
-            self.query_text = self.query.strip()
-            self.query_imgs = []
-        finally:
-            if self.temp_dir and os.path.exists(self.temp_dir):
-                try:
-                    import shutil
-                    shutil.rmtree(self.temp_dir)
-                except Exception as e:
-                    logger.warning(f"Error cleaning up temp directory: {str(e)}")
+        text, imgs = parse_html_to_dict(self.query)
+        image_strings = []
+        
+        for img in imgs:
+            image_path = download_image(img)
+            image_base64,image_format = encode_image_to_base64(image_path)
+            image_strings.append({"extension": image_format,"content": image_base64})
+        self.query_text  = text
+        self.query_imgs = image_strings
 
+    
     def classify_query(self):
-        """Classify the query using LLM and update context."""
-        try:
-            self.parse_query()
-            
-            if not self.query_text:
-                self.query_text = "Please provide your question or describe the issue you're facing."
-                
-            result = llm_call_with_image(
-                get_query_classification_prompt(),
-                self.query_text,
-                self.query_imgs
-            )
-            
-            if not result:
-                return "other"
-                
-            try:
-                res_json = json.loads(result.replace("```json", "").replace("```", ""))
-                query_category = res_json.get('query_category', 'other').strip()
-                return query_category
-            except:
-                return "other"
-            
-        except Exception as e:
-            logger.error(f"Error classifying query: {str(e)}")
-            return "other"
+        self.parse_query()
+        result = llm_call_with_image(get_query_classification_prompt(),self.query_text,self.query_imgs)
+        print(result)
+        res_json = json.loads(result.replace("```json","").replace("```",""))
+        if "error_description" in res_json and res_json['error_description'] != "":
+            self.updated_query_context = f"Query Summary:  {res_json['user_query_summary']}, Error Description: {res_json['error_description']}"
+        else :
+            self.updated_query_context = f"Query Summary:  {res_json['user_query_summary']}"
+        return res_json['query_category']
 
-    def improved_classify_query(self):
-        """Improved classify the query using LLM."""
-        try:
-            if not self.query_text:
-                logger.warning("No query text provided")
-                return "general"
-                
-            # Call LLM for classification
-            if self.query_imgs:
-                result = llm_call_with_image(
-                    "You are a query classifier. Analyze the query and images, then classify the query into one of these categories: test_cases, errors, general. Respond with a JSON containing only the category.",
-                    self.query_text,
-                    self.query_imgs
-                )
-            else:
-                result = llm_call(
-                    "You are a query classifier. Analyze the query and classify it into one of these categories: test_cases, errors, general. Respond with a JSON containing only the category.",
-                    self.query_text
-                )
-            
-            if not result:
-                logger.warning("No classification result from LLM")
-                return "general"
-                
-            # Parse classification result
-            try:
-                result_json = json.loads(result.replace("```json", "").replace("```", "").strip())
-                query_category = result_json.get('query_category', 'general').strip()
-                logger.info(f"Query classified as: {query_category}")
-                return query_category
-            except json.JSONDecodeError as e:
-                logger.error(f"Error parsing classification result: {str(e)}")
-                return "general"
-                
-        except Exception as e:
-            logger.error(f"Error classifying query: {str(e)}")
-            return "general"
 
-if __name__ == "__main__": 
-    # Test code commented out for production
-    pass
+
+# if __name__ == "__main__": 
+#     user_query = """<p><img src="https://nkb-backend-ccbp-media-static.s3.ap-south-1.amazonaws.com/ccbp_prod/media/discussion_attachment/26715292-a21d-427d-bbcc-b334b0b0e2b2.jpeg"></p><p><img src="https://nkb-backend-ccbp-media-static.s3.ap-south-1.amazonaws.com/ccbp_prod/media/discussion_attachment/31cf48ae-6f74-48e3-b7f3-058147e6bd58.jpeg"></p><p><img src="https://nkb-backend-ccbp-media-static.s3.ap-south-1.amazonaws.com/ccbp_prod/media/discussion_attachment/9bfbad29-8c5c-4a41-b951-75c4e193031f.jpeg"></p><p><img src="https://nkb-backend-ccbp-media-static.s3.ap-south-1.amazonaws.com/ccbp_prod/media/discussion_attachment/2fb802a9-df00-420c-a705-c3874c62057f.jpeg"></p><p><br></p><p><br></p><p>explain me error and give me correct code </p>"""
+#     router = QueryRouter(query=user_query) 
+#     context = router.parse_query()
+#     query_category = router.classify_query()
+#     print(query_category)
