@@ -36,7 +36,7 @@ def llm_call(system_prompt, user_prompt):
         print("Calling OpenRouter API...")
         
         # Get API key from environment
-        api_key = os.getenv("OPENAI_API_KEY")
+        api_key = os.getenv("api_key")
         if not api_key:
             raise ValueError("OPENAI_API_KEY not found in environment variables")
         
@@ -74,7 +74,7 @@ def llm_call_with_image(system_prompt, user_prompt_text, user_base_64_imgs):
         print("Calling OpenRouter API with images...")
         
         # Get API key from environment
-        api_key = os.getenv("OPENAI_API_KEY")
+        api_key = os.getenv("api_key")
         if not api_key:
             raise ValueError("OPENAI_API_KEY not found in environment variables")
 
