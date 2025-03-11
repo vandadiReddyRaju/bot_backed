@@ -96,6 +96,7 @@ def process_file():
             
             # Get bot response
             response = qr_bot.get_bot_response()
+            logger.info(response)
             if not response:
                 logger.error("Failed to get response from LLM")
                 return jsonify({"error": "Failed to get response from LLM"}), 500
