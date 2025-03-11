@@ -8,6 +8,7 @@ from werkzeug.utils import secure_filename
 import logging
 import zipfile
 import shutil
+from ide_qr_bot_v0 import QRBot  # Add QRBot import
 
 # Load environment variables
 load_dotenv()
@@ -39,6 +40,16 @@ def extract_zip(zip_path, extract_path):
     except Exception as e:
         logger.error(f"Error extracting zip file: {str(e)}")
         return False
+
+def get_question_id_from_filename(filename):
+    """Extract question ID from filename."""
+    try:
+        # Assuming filename format: questionID_rest_of_filename.zip
+        question_id = filename.split('_')[0]
+        return question_id
+    except Exception as e:
+        logger.error(f"Error extracting question ID from filename: {str(e)}")
+        return None
 
 @app.route('/', methods=['GET'])
 def health_check():
@@ -108,24 +119,33 @@ def process_file():
             zip_path = os.path.join(temp_dir, secure_filename(file.filename))
             file.save(zip_path)
             
-            # Extract the zip file
-            if not extract_zip(zip_path, extract_dir):
-                return jsonify({"error": "Failed to extract zip file"}), 500
+            # Get question ID from filename
+            question_id = get_question_id_from_filename(file.filename)
+            if not question_id:
+                return jsonify({"error": "Invalid file name format. Expected format: questionID_filename.zip"}), 400
+
+            # Initialize QRBot with the query and file details
+            qr_bot = QRBot(
+                user_query=query,
+                question_id=question_id,
+                zip_path=zip_path
+            )
             
-            # Extract file contents from the extracted directory
-            file_contents = extract_file_contents_with_tree(extract_dir, full_desc=True)
-            logger.info("Successfully extracted file contents")
+            # Get bot response using the QRBot system
+            result = qr_bot.get_bot_response()
             
-            # Prepare system prompt
-            system_prompt = """You are an expert code reviewer and mentor. Analyze the provided code and respond to the user's query.
-            Focus on best practices, potential issues, and improvements. If there are any errors, explain them clearly and provide solutions."""
-            
-            # Combine query with file contents
-            full_prompt = f"Query: {query}\n\nCode Analysis:\n{file_contents}"
-            logger.info("Sending request to LLM")
-            
-            # Get response from LLM
-            result = llm_call(system_prompt, full_prompt)
+            if not result or result == "<mentor_required>":
+                # Fallback to generic analysis if QRBot can't handle the query
+                logger.info("Falling back to generic code analysis")
+                if not extract_zip(zip_path, extract_dir):
+                    return jsonify({"error": "Failed to extract zip file"}), 500
+                
+                file_contents = extract_file_contents_with_tree(extract_dir, full_desc=True)
+                system_prompt = """You are an expert code reviewer and mentor. Analyze the provided code and respond to the user's query.
+                Focus on best practices, potential issues, and improvements. If there are any errors, explain them clearly and provide solutions."""
+                
+                full_prompt = f"Query: {query}\n\nCode Analysis:\n{file_contents}"
+                result = llm_call(system_prompt, full_prompt)
             
             if not result:
                 return jsonify({"error": "Failed to get response from LLM"}), 500
