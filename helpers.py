@@ -38,7 +38,7 @@ def llm_call(system_prompt, user_prompt):
         # Get API key from environment
         api_key = os.getenv("api_key")
         if not api_key:
-            raise ValueError("OPENAI_API_KEY not found in environment variables")
+            raise ValueError("api_key not found in environment variables")
         
         client = OpenAI(
             base_url="https://openrouter.ai/api/v1",
@@ -51,19 +51,11 @@ def llm_call(system_prompt, user_prompt):
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
             ],
-            extra_headers={
-                "HTTP-Referer": "https://github.com/vandadiReddyRaju/bot_backed",
-                "X-Title": "IDE-Mentor-Bot"
-            },
-            temperature=0.2
         )
 
-        if completion.choices:
-            result = completion.choices[0].message.content
-            return result
-        else:
-            logger.error("No response received from the AI model")
-            return None
+        
+        result = completion.choices[0].message.content
+        return result
 
     except Exception as e:
         logger.error(f"Error calling OpenRouter API: {str(e)}")
@@ -76,7 +68,7 @@ def llm_call_with_image(system_prompt, user_prompt_text, user_base_64_imgs):
         # Get API key from environment
         api_key = os.getenv("api_key")
         if not api_key:
-            raise ValueError("OPENAI_API_KEY not found in environment variables")
+            raise ValueError("api_key not found in environment variables")
 
         # Prepare the messages with images
         user_prompt_content = [{"type": "text", "text": user_prompt_text}]
@@ -104,11 +96,6 @@ def llm_call_with_image(system_prompt, user_prompt_text, user_base_64_imgs):
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt_content}
             ],
-            extra_headers={
-                "HTTP-Referer": "https://github.com/vandadiReddyRaju/bot_backed",
-                "X-Title": "IDE-Mentor-Bot"
-            },
-            temperature=0.2
         )
 
         if completion.choices:
