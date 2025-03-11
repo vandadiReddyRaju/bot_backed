@@ -1,14 +1,13 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from helpers import llm_call, llm_call_with_image, extract_file_contents_with_tree
-import os
-from dotenv import load_dotenv
-import tempfile
 from werkzeug.utils import secure_filename
+import os
 import logging
-import zipfile
+from ide_qr_bot_v0 import QRBot
+from helpers import check_and_delete_folder
+import tempfile
 import shutil
-from ide_qr_bot_v0 import QRBot  # Add QRBot import
+from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
@@ -20,15 +19,11 @@ CORS(app, resources={
         "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         "allow_headers": ["Content-Type", "Authorization"]
     }
-})  # Enable CORS for all routes
+})
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-# Configure workspace paths
-WORKSPACE_ROOT = os.getenv('WORKSPACE_ROOT', '/home/workspace')
-DOCKER_WORKSPACE = os.getenv('DOCKER_WORKSPACE', '/home/workspace')
 
 # Configure upload settings
 UPLOAD_FOLDER = os.path.join(tempfile.gettempdir(), 'uploads')
@@ -38,16 +33,6 @@ app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB max file size
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
-
-def extract_zip(zip_path, extract_path):
-    """Extract zip file to the specified path."""
-    try:
-        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-            zip_ref.extractall(extract_path)
-        return True
-    except Exception as e:
-        logger.error(f"Error extracting zip file: {str(e)}")
-        return False
 
 def get_question_id_from_filename(filename):
     """Extract question ID from filename."""
@@ -60,59 +45,35 @@ def get_question_id_from_filename(filename):
         logger.error(f"Error extracting question ID from filename: {str(e)}")
         return None
 
-@app.route('/', methods=['GET'])
-def health_check():
-    return jsonify({"status": "healthy", "message": "API is running"}), 200
-
-@app.route('/run-api', methods=['POST'])
-def run_api():
-    try:
-        data = request.get_json()
-
-        if not data:
-            return jsonify({"error": "No data provided"}), 400
-
-        system_prompt = data.get("system_prompt")
-        user_prompt = data.get("user_prompt")
-        images = data.get("images", [])
-
-        if not system_prompt or not user_prompt:
-            return jsonify({"error": "Missing required fields"}), 400
-
-        # Ensure workspace directories exist
-        os.makedirs(WORKSPACE_ROOT, exist_ok=True)
-        if not os.path.exists(DOCKER_WORKSPACE):
-            os.makedirs(DOCKER_WORKSPACE, exist_ok=True)
-
-        # Choose the correct function based on your inputs
-        if images:
-            result = llm_call_with_image(system_prompt, user_prompt, images)
-        else:
-            result = llm_call(system_prompt, user_prompt)
-        
-        if not result:
-            return jsonify({"error": "Failed to get response from LLM"}), 500
-            
-        return jsonify({"result": result})
-    
-    except Exception as e:
-        logger.error(f"Error in run-api: {str(e)}")
-        return jsonify({"error": str(e)}), 500
+@app.route('/')
+def home():
+    """Health check endpoint."""
+    return jsonify({"status": "ok"}), 200
 
 @app.route('/process', methods=['POST'])
 def process_file():
     """Process uploaded file and generate response."""
     try:
-        if 'file' not in request.files:
+        logger.info("Received file upload request")
+        logger.info(f"Files in request: {list(request.files.keys())}")
+        logger.info(f"Form data: {list(request.form.keys())}")
+        
+        if 'zip' not in request.files:
+            logger.error("No file part in request")
             return jsonify({"error": "No file uploaded"}), 400
             
-        file = request.files['file']
+        file = request.files['zip']
         query = request.form.get('query', '')
         
+        logger.info(f"File received: {file.filename}")
+        logger.info(f"Query received: {query}")
+        
         if not file or file.filename == '':
+            logger.error("No file selected")
             return jsonify({"error": "No file selected"}), 400
             
         if not allowed_file(file.filename):
+            logger.error(f"Invalid file type: {file.filename}")
             return jsonify({"error": "Invalid file type"}), 400
 
         # Create temp directory for file processing
@@ -122,10 +83,12 @@ def process_file():
         try:
             # Save and process the file
             file.save(zip_path)
+            logger.info(f"File saved to: {zip_path}")
             
             # Extract question ID from filename
             question_id = get_question_id_from_filename(file.filename)
             if not question_id:
+                logger.error("Invalid question ID")
                 return jsonify({"error": "Invalid question ID"}), 400
 
             # Initialize QR Bot
@@ -134,8 +97,10 @@ def process_file():
             # Get bot response
             response = qr_bot.get_bot_response()
             if not response:
+                logger.error("Failed to get response from LLM")
                 return jsonify({"error": "Failed to get response from LLM"}), 500
                 
+            logger.info("Successfully generated response")
             return jsonify({"response": response})
 
         except Exception as e:
@@ -147,6 +112,7 @@ def process_file():
             try:
                 if os.path.exists(temp_dir):
                     shutil.rmtree(temp_dir)
+                    logger.info("Cleaned up temp directory")
             except Exception as e:
                 logger.warning(f"Error cleaning up temp directory: {str(e)}")
 
@@ -165,22 +131,16 @@ def after_request(response):
 # Error handlers
 @app.errorhandler(413)
 def request_entity_too_large(error):
-    return jsonify({"error": "File too large. Maximum size is 50MB"}), 413
-
-@app.errorhandler(500)
-def internal_server_error(error):
-    return jsonify({"error": "Internal server error"}), 500
+    """Handle file size exceeding limit."""
+    return jsonify({"error": "File size exceeds 50MB limit"}), 413
 
 @app.errorhandler(404)
-def not_found_error(error):
+def not_found(error):
+    """Handle 404 errors."""
     return jsonify({"error": "Resource not found"}), 404
 
 if __name__ == '__main__':
     # Ensure upload folder exists
     os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-    # Use environment variables for host and port
-    port = int(os.getenv('PORT', 5000))
-    host = os.getenv('HOST', '0.0.0.0')
-    
-    # Run in production mode
-    app.run(host=host, port=port, debug=False)
+    # Run the app
+    app.run(host='0.0.0.0', port=10000)
