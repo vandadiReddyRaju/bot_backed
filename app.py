@@ -14,7 +14,7 @@ from ide_qr_bot_v0 import QRBot  # Add QRBot import
 load_dotenv()
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, resources={r"/*": {"origins": "*"}})  # Enable CORS for all routes
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -25,8 +25,10 @@ WORKSPACE_ROOT = os.getenv('WORKSPACE_ROOT', '/home/workspace')
 DOCKER_WORKSPACE = os.getenv('DOCKER_WORKSPACE', '/home/workspace')
 
 # Configure upload settings
-MAX_CONTENT_LENGTH = 50 * 1024 * 1024  # 50MB limit
+UPLOAD_FOLDER = os.path.join(tempfile.gettempdir(), 'uploads')
 ALLOWED_EXTENSIONS = {'zip'}
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB max file size
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -171,6 +173,14 @@ def process_file():
         except Exception as e:
             logger.warning(f"Error cleaning up temporary directories: {str(e)}")
 
+@app.after_request
+def after_request(response):
+    """Add CORS headers to all responses."""
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+    return response
+
 # Error handlers
 @app.errorhandler(413)
 def request_entity_too_large(error):
@@ -185,12 +195,11 @@ def not_found_error(error):
     return jsonify({"error": "Resource not found"}), 404
 
 if __name__ == '__main__':
+    # Ensure upload folder exists
+    os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
     # Use environment variables for host and port
     port = int(os.getenv('PORT', 5000))
     host = os.getenv('HOST', '0.0.0.0')
-    
-    # Configure max content length
-    app.config['MAX_CONTENT_LENGTH'] = MAX_CONTENT_LENGTH
     
     # Run in production mode
     app.run(host=host, port=port, debug=False)
