@@ -124,18 +124,19 @@ def llm_call_with_image(system_prompt, user_prompt_text, user_base_64_imgs):
                 {"role": "user", "content": user_prompt_content}
             ],
         )
+        
         result = completion.choices[0].message.content
         logger.info("Successfully received response from OpenRouter")
         return result
-"""
-        if completion and completion.choices:
-            result = completion.choices[0].message.content
-            logger.info("Successfully received response from OpenRouter")
-            return result
-        else:
-            logger.error("No response received from the AI model")
-            return "Error: No response received from the AI model. Please try again."
-"""
+
+#        if completion and completion.choices:
+#           result = completion.choices[0].message.content
+#           logger.info("Successfully received response from OpenRouter")
+#           return result
+#       else:
+#           logger.error("No response received from the AI model")
+#           return "Error: No response received from the AI model. Please try again."
+
     except openai.APITimeoutError as e:
         logger.error(f"API timeout error: {str(e)}")
         return "Error: Request timed out. Please try again."
