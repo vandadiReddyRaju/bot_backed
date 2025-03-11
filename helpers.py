@@ -1,223 +1,195 @@
+# helpers.py
+
 import base64
 from io import BytesIO
 from PIL import Image
 from bs4 import BeautifulSoup
 import requests
 import os
-import logging
-import json
-import tempfile
-import shutil
 from zipfile import ZipFile, BadZipFile
 import subprocess
 import re
+import shutil
 import pandas as pd
 import glob
 import time
 from dotenv import load_dotenv
 from openai import OpenAI
 import openai
-from pathlib import Path
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
-# Load environment variables
 load_dotenv()
+def parse_html_to_dict(html_text):
+    soup = BeautifulSoup(html_text, 'html.parser')
+    text_parts = []
+    for p in soup.find_all('p'):
+        text_parts.append(p.get_text(strip=True))
+    combined_text = " ".join(text_parts)
+    img_links = [img['src'] for img in soup.find_all('img')]
 
-def get_api_key():
-    """Get API key from environment variables."""
-    api_key = os.getenv('api_key')  
-    if not api_key:
-        logger.error("API key not found in environment variables")
-        raise ValueError("OPENAI_API_KEY not found in environment variables")
-    return api_key
+    return combined_text, img_links
+
+# def llm_call(system_prompt,user_prompt):
+#     print("calling API 1")
+#     client = AzureOpenAI(
+#         azure_endpoint="https://nw-tech-chat.openai.azure.com/openai/deployments/o3-mini/chat/completions?api-version=2024-12-01-preview",
+#         api_key="...",
+#         api_version="2024-12-01-preview"
+#     )
+#     response = client.chat.completions.create(model="o3-mini", messages=[{"role": "system", "content":  system_prompt },{"role": "user", "content": user_prompt}])
+
+#     res_text = response.choices[0].message.content
+#     #print(response.usage.completion_tokens,response.usage.prompt_tokens)
+#     return res_text
+
 
 def llm_call(system_prompt, user_prompt):
-    """Make an API call to the LLM service."""
     try:
-        api_key = get_api_key()
-        if not api_key:
-            raise ValueError("API key not found")
-
-        # Create OpenRouter client with required configuration
+        print("Calling OpenRouter API...")
+        
+        # First try environment variable
+        api_key = os.getenv("api_key")
+        openai.api_key = api_key
+        
         client = OpenAI(
             base_url="https://openrouter.ai/api/v1",
-            api_key=api_key
+            api_key=api_key,  # Replace with your API key
         )
-        
+                    
         completion = client.chat.completions.create(
-            model="deepseek/deepseek-r1-zero:free",
+            model="deepseek/deepseek-r1-distill-llama-70b:free",  # Model you're using
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
             ],
-            extra_headers={
-                "HTTP-Referer": "https://github.com/vandadiReddyRaju/bot_backed",
-                "X-Title": "IDE-Mentor-Bot"
-            }
+            temperature=0.2  # Temperature setting for the model
         )
 
-        if not completion or not completion.choices:
-            logger.error("No response from OpenRouter API")
-            return None
-
-        return completion.choices[0].message.content
+        if completion.choices:
+            result = completion.choices[0].message.content
+            return result  # This will print the response from the AI model
+        else:
+            print("Error: No response received from the AI model.")
 
     except Exception as e:
-        logger.error(f"Error calling OpenRouter API: {str(e)}")
-        return None
+        print(f"Error calling OpenRouter API: {str(e)}")
+        return "I apologize, but I'm having trouble processing your request at the moment. Please try again later."
+
 
 def llm_call_with_image(system_prompt, user_prompt_text, user_base_64_imgs):
-    """Make an API call to the LLM service with image content."""
     try:
-        api_key = get_api_key()
-        if not api_key:
-            raise ValueError("API key not found")
+        print("Calling OpenRouter API with images...")
+        
+        # First try environment variable
+        api_key = os.getenv('api_key')
 
-        # Create OpenRouter client with required configuration
+        if not api_key:
+            # Fallback to a default key
+            api_key = api_key
+
+        # Prepare the messages with images
+        user_prompt_content = [{"type": "text", "text": user_prompt_text}]
+        for img in user_base_64_imgs:
+            img_content = {"type": "image_url", "image_url": {"url": f"data:image/{img['extension']};base64,{img['content']}"}}
+            user_prompt_content.append(img_content)
+            
+            
         client = OpenAI(
             base_url="https://openrouter.ai/api/v1",
-            api_key=api_key
+            api_key=api_key,  # Replace with your API key
         )
-        
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {
-                "role": "user", 
-                "content": [{"type": "text", "text": user_prompt_text}]
-            }
-        ]
-        
-        # Add images to the user message if provided
-        if user_base_64_imgs:
-            for img in user_base_64_imgs:
-                if not img.get('content') or not img.get('extension'):
-                    logger.warning("Invalid image data format")
-                    continue
                     
-                messages[-1]["content"].append({
-                    "type": "image_url",
-                    "image_url": {
-                        "url": f"data:image/{img['extension']};base64,{img['content']}"
-                    }
-                })
-            
         completion = client.chat.completions.create(
-            model="deepseek/deepseek-r1-zero:free",
-            messages=messages,
             extra_headers={
-                "HTTP-Referer": "https://github.com/vandadiReddyRaju/bot_backed",
-                "X-Title": "IDE-Mentor-Bot"
-            }
+                "HTTP-Referer": "https://github.com/ranjithkumarkurva",  # Optional. Referer URL for rankings
+                "X-Title": "IDE-Mentor-Bot",  # Optional. Title for rankings
+            },
+            model="deepseek/deepseek-r1-distill-llama-70b:free",  # Model you're using
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt_content}
+            ],
+            temperature=0.2  # Temperature setting for the model
         )
 
-        if not completion or not completion.choices:
-            logger.error("No response from OpenRouter API")
-            return None
-
-        return completion.choices[0].message.content
+# Extract the response from the completion and return the content
+        if completion.choices:
+            result = completion.choices[0].message.content
+            return result  # This will print the response from the AI model
+        else:
+            print("Error: No response received from the AI model.")
 
     except Exception as e:
-        logger.error(f"Error calling OpenRouter API with images: {str(e)}")
-        return None
+        print(f"Error calling OpenRouter API with images: {str(e)}")
+        return "I apologize, but I'm having trouble processing your image-based request at the moment. Please try again later."
 
-def parse_html_to_dict(html_text):
-    """Parse HTML content to extract text and image links."""
-    try:
-        soup = BeautifulSoup(html_text, 'html.parser')
-        text_content = soup.get_text(strip=True)
-        image_links = [img['src'] for img in soup.find_all('img', src=True)]
-        return {"text": text_content, "images": image_links}
-    except Exception as e:
-        logger.error(f"Error parsing HTML: {str(e)}")
-        return {"text": "", "images": []}
 
 def download_image(url):
-    """Download an image from a URL and save it temporarily."""
-    try:
-        response = requests.get(url, timeout=10)
-        response.raise_for_status()
-        
-        with tempfile.NamedTemporaryFile(delete=False, suffix=Path(url).suffix) as temp_file:
-            temp_file.write(response.content)
-            return temp_file.name
-            
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Failed to download image from {url}: {str(e)}")
-        raise
-    except Exception as e:
-        logger.error(f"Error processing image from {url}: {str(e)}")
-        raise
+    response = requests.get(url)
+    if response.status_code == 200:
+        image_name = os.path.join(url.split('/')[-1])
+        with open(image_name, 'wb') as f:
+            f.write(response.content)
+        return image_name
+    else:
+        raise Exception(f"Failed to download image. Status code: {response.status_code}")
+
 
 def encode_image_to_base64(image_path):
-    """Encode an image file to base64 string."""
-    try:
-        with Image.open(image_path) as image:
-            image_format = image.format.lower()
-            buffered = BytesIO()
-            image.save(buffered, format=image_format.upper())
-            img_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
-            
-        # Clean up the temporary file
-        try:
-            os.unlink(image_path)
-        except Exception as e:
-            logger.warning(f"Failed to delete temporary image file {image_path}: {str(e)}")
-            
-        return img_str, image_format
-        
-    except Exception as e:
-        logger.error(f"Error encoding image {image_path}: {str(e)}")
-        raise
+    with Image.open(image_path) as image:
+        image_format = image.format.lower()
+        buffered = BytesIO()
+        image.save(buffered, format=image_format.upper())
+        img_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
+    return img_str, image_format
+
 
 def extract_file_contents_with_tree(folder_path, full_desc=False):
-    """Extract contents of files in a directory tree."""
-    try:
-        result = []
-        tree = []
-        allowed_extensions = ('.json', '.js', '.ts', '.html', '.css')
+    result = []
+    tree = []
+    allowed_extensions = ('.json', '.js', '.ts', '.html', '.css')
 
-        def add_to_tree(path, indent=""):
-            parts = path.split(os.sep)
-            tree.append(f"{indent}* {parts[-1]}")
 
-        for root, dirs, files in os.walk(folder_path):
-            if 'node_modules' in dirs:
-                dirs.remove('node_modules')
+    def add_to_tree(path, indent=""):
+        parts = path.split(os.sep)
+        tree.append(f"{indent}* {parts[-1]}")
 
-            level = root.replace(folder_path, '').count(os.sep)
-            indent = '  ' * level
-            add_to_tree(root, indent)
 
-            for file in files:
-                if file.endswith(allowed_extensions):
-                    file_path = os.path.join(root, file)
-                    relative_path = os.path.relpath(file_path, folder_path)
-                    
-                    add_to_tree(file, indent + '  ')
-                    
-                    try:
-                        with open(file_path, 'r', encoding='utf-8') as f:
-                            content = f.read()
-                        result.append(f"\n{relative_path}:\n{content}\n")
-                    except Exception as e:
-                        logger.error(f"Error reading file {relative_path}: {str(e)}")
-                        result.append(f"\nError reading file {relative_path}: {str(e)}\n")
+    for root, dirs, files in os.walk(folder_path):
+        if 'node_modules' in dirs:
+            dirs.remove('node_modules')  # Don't traverse into node_modules
 
-        tree_str = "\n".join(tree)
-        content_str = "".join(result)
 
-        final_output = f"Directory Tree: \n{tree_str}"
-        if full_desc:
-            final_output += f"\n\nFile contents: \n{content_str}"
-        
-        return final_output
-        
-    except Exception as e:
-        logger.error(f"Error extracting file contents: {str(e)}")
-        raise
+        level = root.replace(folder_path, '').count(os.sep)
+        indent = '  ' * level
+        add_to_tree(root, indent)
+
+
+        for file in files:
+            if file.endswith(allowed_extensions):
+                file_path = os.path.join(root, file)
+                relative_path = os.path.relpath(file_path, folder_path)
+                
+                add_to_tree(file, indent + '  ')
+                
+                try:
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        content = f.read()
+                    result.append(f"\n{relative_path}:\n{content}\n")
+                except Exception as e:
+                    result.append(f"\nError reading file {relative_path}: {str(e)}\n")
+
+
+    tree_str = "\n".join(tree)
+    content_str = "".join(result)
+
+
+    final_output = f"Directory Tree: \n{tree_str}"
+    if full_desc:
+        final_output += f"\n\nFile contents: \n{content_str}"
+    
+    return final_output  
+
 
 def get_question_details_from_zip(zip_filename):
     """
@@ -278,9 +250,10 @@ def get_question_details_from_zip(zip_filename):
         print("Error: The CSV file is empty")
         return None
     except Exception as e:
-        logger.error(f"Error processing CSV file: {str(e)}")
+        print(f"Error processing CSV file: {str(e)}")
         print(f"Current working directory: {os.getcwd()}")
         return None
+
 
 def copy_folder_to_docker(container_id, zip_path, output_folder):
     """
@@ -316,7 +289,7 @@ def copy_folder_to_docker(container_id, zip_path, output_folder):
         print(f"The file '{zip_path}' is not a valid zip file.")
         return
     except Exception as e:
-        logger.error(f"An error occurred while extracting zip: {e}")
+        print(f"An error occurred while extracting zip: {e}")
         return
 
 
@@ -332,11 +305,25 @@ def copy_folder_to_docker(container_id, zip_path, output_folder):
 
     print(f"Contents of '{workspace_dir}' have been copied to '{output_folder}' in container '{container_id}'.")
 
+
 def check_and_delete_folder(folder_path):
-    """Check if a folder exists and delete it if it does."""
-    try:
-        if os.path.exists(folder_path):
+    """
+    Deletes the specified folder if it exists.
+
+    Args:
+        folder_path (str): Path to the folder.
+
+    Returns:
+        bool: True if deleted, False otherwise.
+    """
+    if os.path.isdir(folder_path):
+        try:
             shutil.rmtree(folder_path)
-            logger.info(f"Successfully deleted folder: {folder_path}")
-    except Exception as e:
-        logger.error(f"Error deleting folder {folder_path}: {str(e)}")
+            print(f"Folder '{folder_path}' has been deleted.")
+            return True
+        except Exception as e:
+            print(f"Error occurred while deleting the folder: {e}")
+            return False
+    else:
+        print(f"Folder '{folder_path}' does not exist.")
+        return False
