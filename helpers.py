@@ -28,27 +28,29 @@ load_dotenv()
 
 def get_api_key():
     """Get API key from environment variables."""
-    api_key = os.getenv('api_key')  
+    api_key = os.getenv('OPENAI_API_KEY')  
     if not api_key:
-        logger.error("API key not found in environment variables")
+        logger.error("OPENAI_API_KEY not found in environment variables")
         raise ValueError("OPENAI_API_KEY not found in environment variables")
     return api_key
 
 def llm_call(system_prompt, user_prompt):
     """Make an API call to the LLM service."""
     try:
+        print("Calling OpenRouter API...")
+        
+        # Get API key from environment
         api_key = get_api_key()
         if not api_key:
-            raise ValueError("API key not found")
-
-        # Create OpenRouter client with required configuration
+            raise ValueError("OPENAI_API_KEY not found in environment variables")
+        
         client = OpenAI(
             base_url="https://openrouter.ai/api/v1",
             api_key=api_key
         )
-        
+                    
         completion = client.chat.completions.create(
-            model="deepseek/deepseek-r1-zero:free",
+            model="deepseek/deepseek-r1-distill-llama-70b:free",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
@@ -56,14 +58,16 @@ def llm_call(system_prompt, user_prompt):
             extra_headers={
                 "HTTP-Referer": "https://github.com/vandadiReddyRaju/bot_backed",
                 "X-Title": "IDE-Mentor-Bot"
-            }
+            },
+            temperature=0.2
         )
 
-        if not completion or not completion.choices:
-            logger.error("No response from OpenRouter API")
+        if completion.choices:
+            result = completion.choices[0].message.content
+            return result
+        else:
+            logger.error("No response received from the AI model")
             return None
-
-        return completion.choices[0].message.content
 
     except Exception as e:
         logger.error(f"Error calling OpenRouter API: {str(e)}")
@@ -72,52 +76,52 @@ def llm_call(system_prompt, user_prompt):
 def llm_call_with_image(system_prompt, user_prompt_text, user_base_64_imgs):
     """Make an API call to the LLM service with image content."""
     try:
+        print("Calling OpenRouter API with images...")
+        
+        # Get API key from environment
         api_key = get_api_key()
         if not api_key:
-            raise ValueError("API key not found")
+            raise ValueError("OPENAI_API_KEY not found in environment variables")
 
-        # Create OpenRouter client with required configuration
+        # Prepare the messages with images
+        user_prompt_content = [{"type": "text", "text": user_prompt_text}]
+        for img in user_base_64_imgs:
+            if not img.get('content') or not img.get('extension'):
+                logger.warning("Invalid image data format")
+                continue
+                
+            img_content = {
+                "type": "image_url",
+                "image_url": {
+                    "url": f"data:image/{img['extension']};base64,{img['content']}"
+                }
+            }
+            user_prompt_content.append(img_content)
+            
         client = OpenAI(
             base_url="https://openrouter.ai/api/v1",
             api_key=api_key
         )
-        
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {
-                "role": "user", 
-                "content": [{"type": "text", "text": user_prompt_text}]
-            }
-        ]
-        
-        # Add images to the user message if provided
-        if user_base_64_imgs:
-            for img in user_base_64_imgs:
-                if not img.get('content') or not img.get('extension'):
-                    logger.warning("Invalid image data format")
-                    continue
                     
-                messages[-1]["content"].append({
-                    "type": "image_url",
-                    "image_url": {
-                        "url": f"data:image/{img['extension']};base64,{img['content']}"
-                    }
-                })
-            
         completion = client.chat.completions.create(
-            model="deepseek/deepseek-r1-zero:free",
-            messages=messages,
+            model="deepseek/deepseek-r1-distill-llama-70b:free",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt_content}
+            ],
             extra_headers={
                 "HTTP-Referer": "https://github.com/vandadiReddyRaju/bot_backed",
                 "X-Title": "IDE-Mentor-Bot"
-            }
+            },
+            temperature=0.2
         )
 
-        if not completion or not completion.choices:
-            logger.error("No response from OpenRouter API")
+        if completion.choices:
+            result = completion.choices[0].message.content
+            return result
+        else:
+            logger.error("No response received from the AI model")
             return None
-
-        return completion.choices[0].message.content
 
     except Exception as e:
         logger.error(f"Error calling OpenRouter API with images: {str(e)}")
@@ -127,12 +131,16 @@ def parse_html_to_dict(html_text):
     """Parse HTML content to extract text and image links."""
     try:
         soup = BeautifulSoup(html_text, 'html.parser')
-        text_content = soup.get_text(strip=True)
-        image_links = [img['src'] for img in soup.find_all('img', src=True)]
-        return {"text": text_content, "images": image_links}
+        text_parts = []
+        for p in soup.find_all('p'):
+            text_parts.append(p.get_text(strip=True))
+        combined_text = " ".join(text_parts)
+        img_links = [img['src'] for img in soup.find_all('img')]
+
+        return combined_text, img_links
     except Exception as e:
         logger.error(f"Error parsing HTML: {str(e)}")
-        return {"text": "", "images": []}
+        return "", []
 
 def download_image(url):
     """Download an image from a URL and save it temporarily."""
