@@ -41,8 +41,11 @@ def llm_call(system_prompt, user_prompt):
         if not api_key:
             raise ValueError("API key not found")
 
-        # Create client without any extra configuration
-        client = OpenAI(api_key=api_key)
+        # Create OpenRouter client with required configuration
+        client = OpenAI(
+            base_url="https://openrouter.ai/api/v1",
+            api_key=api_key
+        )
         
         completion = client.chat.completions.create(
             model="deepseek/deepseek-r1-zero:free",
@@ -50,8 +53,9 @@ def llm_call(system_prompt, user_prompt):
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
             ],
-            headers={
-                "HTTP-Referer": "https://github.com/vandadiReddyRaju/bot_backed"
+            extra_headers={
+                "HTTP-Referer": "https://github.com/vandadiReddyRaju/bot_backed",
+                "X-Title": "IDE-Mentor-Bot"
             }
         )
 
@@ -72,8 +76,11 @@ def llm_call_with_image(system_prompt, user_prompt_text, user_base_64_imgs):
         if not api_key:
             raise ValueError("API key not found")
 
-        # Create client without any extra configuration
-        client = OpenAI(api_key=api_key)
+        # Create OpenRouter client with required configuration
+        client = OpenAI(
+            base_url="https://openrouter.ai/api/v1",
+            api_key=api_key
+        )
         
         messages = [
             {"role": "system", "content": system_prompt},
@@ -100,8 +107,9 @@ def llm_call_with_image(system_prompt, user_prompt_text, user_base_64_imgs):
         completion = client.chat.completions.create(
             model="deepseek/deepseek-r1-zero:free",
             messages=messages,
-            headers={
-                "HTTP-Referer": "https://github.com/vandadiReddyRaju/bot_backed"
+            extra_headers={
+                "HTTP-Referer": "https://github.com/vandadiReddyRaju/bot_backed",
+                "X-Title": "IDE-Mentor-Bot"
             }
         )
 
