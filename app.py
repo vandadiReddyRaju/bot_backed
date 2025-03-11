@@ -14,7 +14,13 @@ from ide_qr_bot_v0 import QRBot  # Add QRBot import
 load_dotenv()
 
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "*"}})  # Enable CORS for all routes
+CORS(app, resources={
+    r"/*": {
+        "origins": ["https://ide-mentor-bot-frontend.onrender.com"],
+        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization"]
+    }
+})  # Enable CORS for all routes
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -95,88 +101,63 @@ def run_api():
 
 @app.route('/process', methods=['POST'])
 def process_file():
-    temp_dir = None
-    extract_dir = None
+    """Process uploaded file and generate response."""
     try:
-        if 'zip' not in request.files:
-            return jsonify({"error": "No file provided"}), 400
+        if 'file' not in request.files:
+            return jsonify({"error": "No file uploaded"}), 400
+            
+        file = request.files['file']
+        query = request.form.get('query', '')
         
-        file = request.files['zip']
-        query = request.form.get('query')
-        
-        if not file or not file.filename:
+        if not file or file.filename == '':
             return jsonify({"error": "No file selected"}), 400
             
-        if not query:
-            return jsonify({"error": "No query provided"}), 400
-            
         if not allowed_file(file.filename):
-            return jsonify({"error": "Invalid file type. Only ZIP files are allowed"}), 400
+            return jsonify({"error": "Invalid file type"}), 400
 
-        # Create temporary directories
+        # Create temp directory for file processing
         temp_dir = tempfile.mkdtemp()
-        extract_dir = tempfile.mkdtemp()
+        zip_path = os.path.join(temp_dir, secure_filename(file.filename))
         
         try:
-            # Save and extract the zip file
-            zip_path = os.path.join(temp_dir, secure_filename(file.filename))
+            # Save and process the file
             file.save(zip_path)
             
-            # Get question ID from filename
+            # Extract question ID from filename
             question_id = get_question_id_from_filename(file.filename)
             if not question_id:
-                return jsonify({"error": "Invalid file name format. Expected format: questionID_filename.zip"}), 400
+                return jsonify({"error": "Invalid question ID"}), 400
 
-            # Initialize QRBot with the query and file details
-            qr_bot = QRBot(
-                user_query=query,
-                question_id=question_id,
-                zip_path=zip_path
-            )
+            # Initialize QR Bot
+            qr_bot = QRBot(query, question_id, zip_path=zip_path)
             
-            # Get bot response using the QRBot system
-            result = qr_bot.get_bot_response()
-            
-            if not result or result == "<mentor_required>":
-                # Fallback to generic analysis if QRBot can't handle the query
-                logger.info("Falling back to generic code analysis")
-                if not extract_zip(zip_path, extract_dir):
-                    return jsonify({"error": "Failed to extract zip file"}), 500
-                
-                file_contents = extract_file_contents_with_tree(extract_dir, full_desc=True)
-                system_prompt = """You are an expert code reviewer and mentor. Analyze the provided code and respond to the user's query.
-                Focus on best practices, potential issues, and improvements. If there are any errors, explain them clearly and provide solutions."""
-                
-                full_prompt = f"Query: {query}\n\nCode Analysis:\n{file_contents}"
-                result = llm_call(system_prompt, full_prompt)
-            
-            if not result:
+            # Get bot response
+            response = qr_bot.get_bot_response()
+            if not response:
                 return jsonify({"error": "Failed to get response from LLM"}), 500
-            
-            return jsonify({"response": result})
-            
+                
+            return jsonify({"response": response})
+
         except Exception as e:
-            logger.error(f"Error processing file contents: {str(e)}")
-            return jsonify({"error": f"Error processing file: {str(e)}"}), 500
+            logger.error(f"Error processing file: {str(e)}")
+            return jsonify({"error": str(e)}), 500
             
+        finally:
+            # Clean up temp directory
+            try:
+                if os.path.exists(temp_dir):
+                    shutil.rmtree(temp_dir)
+            except Exception as e:
+                logger.warning(f"Error cleaning up temp directory: {str(e)}")
+
     except Exception as e:
-        logger.error(f"Error processing file: {str(e)}")
+        logger.error(f"Error in process_file: {str(e)}")
         return jsonify({"error": str(e)}), 500
-        
-    finally:
-        # Clean up temporary directories
-        try:
-            if temp_dir and os.path.exists(temp_dir):
-                shutil.rmtree(temp_dir)
-            if extract_dir and os.path.exists(extract_dir):
-                shutil.rmtree(extract_dir)
-        except Exception as e:
-            logger.warning(f"Error cleaning up temporary directories: {str(e)}")
 
 @app.after_request
 def after_request(response):
     """Add CORS headers to all responses."""
-    response.headers.add('Access-Control-Allow-Origin', '*')
+    response.headers.add('Access-Control-Allow-Origin', 'https://ide-mentor-bot-frontend.onrender.com')
     response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
     response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
     return response
