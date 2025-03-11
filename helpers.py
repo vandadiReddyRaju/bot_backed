@@ -71,14 +71,17 @@ def llm_call(system_prompt, user_prompt):
                 {"role": "user", "content": user_prompt}
             ],
         )
+        result = completion.choices[0].message.content
+        logger.info("Successfully received response from OpenRouter")
+        return result
 
-        if completion and completion.choices:
-            result = completion.choices[0].message.content
-            logger.info("Successfully received response from OpenRouter")
-            return result
-        else:
-            logger.error("No response received from the AI model")
-            return "Error: No response received from the AI model. Please try again."
+#        if completion and completion.choices:
+#           result = completion.choices[0].message.content
+#           logger.info("Successfully received response from OpenRouter")
+#           return result
+#        else:
+#          logger.error("No response received from the AI model")
+#          return "Error: No response received from the AI model. Please try again."
 
     except openai.APITimeoutError as e:
         logger.error(f"API timeout error: {str(e)}")
