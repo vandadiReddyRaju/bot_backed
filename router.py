@@ -91,6 +91,44 @@ class QueryRouter:
             logger.error(f"Error classifying query: {str(e)}")
             return "other"
 
+    def improved_classify_query(self):
+        """Improved classify the query using LLM."""
+        try:
+            if not self.query_text:
+                logger.warning("No query text provided")
+                return "general"
+                
+            # Call LLM for classification
+            if self.query_imgs:
+                result = llm_call_with_image(
+                    "You are a query classifier. Analyze the query and images, then classify the query into one of these categories: test_cases, errors, general. Respond with a JSON containing only the category.",
+                    self.query_text,
+                    self.query_imgs
+                )
+            else:
+                result = llm_call(
+                    "You are a query classifier. Analyze the query and classify it into one of these categories: test_cases, errors, general. Respond with a JSON containing only the category.",
+                    self.query_text
+                )
+            
+            if not result:
+                logger.warning("No classification result from LLM")
+                return "general"
+                
+            # Parse classification result
+            try:
+                result_json = json.loads(result.replace("```json", "").replace("```", "").strip())
+                query_category = result_json.get('query_category', 'general').strip()
+                logger.info(f"Query classified as: {query_category}")
+                return query_category
+            except json.JSONDecodeError as e:
+                logger.error(f"Error parsing classification result: {str(e)}")
+                return "general"
+                
+        except Exception as e:
+            logger.error(f"Error classifying query: {str(e)}")
+            return "general"
+
 if __name__ == "__main__": 
     # Test code commented out for production
     pass
